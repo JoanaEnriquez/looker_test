@@ -1,3 +1,6 @@
+// Ensure that d3 is available
+import * as d3 from "https://d3js.org/d3.v5.min.js";
+
 looker.plugins.visualizations.add({
   id: "custom_radial_gauge",
   label: "Custom Radial Gauge",
@@ -51,6 +54,11 @@ looker.plugins.visualizations.add({
     `;
   },
   updateAsync: function(data, element, config, queryResponse, details, done) {
+    // Debugging Information
+    console.log("Data: ", data);
+    console.log("Config: ", config);
+    console.log("Query Response: ", queryResponse);
+
     if (!data.length || !queryResponse.fields.measures.length) {
       this.addError({title: "No Data or Invalid Configuration", message: "Please check your query and configuration."});
       return;
@@ -66,7 +74,13 @@ looker.plugins.visualizations.add({
     var min = config.min;
     var max = config.max;
     var segments = config.segments;
-    var needleValueField = config.needleValue;
+    var needleValueField = config.needleValue || queryResponse.fields.measures[0].name;
+
+    // Validate needleValueField
+    if (!data[0].hasOwnProperty(needleValueField)) {
+      this.addError({title: "Invalid Needle Value Field", message: `The field '${needleValueField}' does not exist in the data.`});
+      return;
+    }
 
     // Create color scale based on segments
     var colorScale = d3.scaleThreshold()
@@ -128,6 +142,7 @@ looker.plugins.visualizations.add({
       .attr("stroke-width", 2);
 
     var value = data[0][needleValueField].value;
+    console.log("Needle Value: ", value); // Debugging needle value
     var angle = (value - min) / (max - min) * Math.PI - Math.PI / 2;
     needle.attr("transform", "rotate(" + (angle * 180 / Math.PI) + ")");
 
