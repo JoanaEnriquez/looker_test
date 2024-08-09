@@ -1,1 +1,1 @@
-# looker_test
+For Looker testing of custom visualization
