@@ -1,0 +1,195 @@
+looker.plugins.visualizations.add({
+  id: "custom_radial_gauge",
+  label: "Custom Radial Gauge",
+  options: {
+    min: {
+      type: "number",
+      label: "Minimum Value",
+      default: 0
+    },
+    max: {
+      type: "number",
+      label: "Maximum Value",
+      default: 200000
+    },
+    red_segment_from: {
+      type: "number",
+      label: "Red Segment Start",
+      default: 0
+    },
+    red_segment_to: {
+      type: "number",
+      label: "Red Segment End",
+      default: 100000
+    },
+    yellow_segment_from: {
+      type: "number",
+      label: "Yellow Segment Start",
+      default: 100000
+    },
+    yellow_segment_to: {
+      type: "number",
+      label: "Yellow Segment End",
+      default: 150000
+    },
+    green_segment_from: {
+      type: "number",
+      label: "Green Segment Start",
+      default: 150000
+    },
+    green_segment_to: {
+      type: "number",
+      label: "Green Segment End",
+      default: 200000
+    },
+    value_position: {
+      type: "string",
+      label: "Value Position",
+      display: "select",
+      values: [
+        {"Center": "center"},
+        {"Bottom": "bottom"}
+      ],
+      default: "center"
+    },
+    donut_thickness: {
+      type: "number",
+      label: "Donut Thickness",
+      default: 0.7
+    },
+    show_segment_values: {
+      type: "boolean",
+      label: "Show Segment Start/End Values",
+      default: true
+    }
+  },
+  create: function(element, config) {
+    element.innerHTML = `
+      <style>
+        .gauge {
+          width: 100%;
+          height: 100%;
+        }
+        .value-text {
+          font-size: 24px;
+          text-anchor: middle;
+          dominant-baseline: middle;
+        }
+        .min-max-text {
+          font-size: 16px;
+          text-anchor: middle;
+          dominant-baseline: middle;
+        }
+      </style>
+      <svg class="gauge"></svg>
+    `;
+
+    if (!window.d3) {
+      var script = document.createElement("script");
+      script.src = "https://d3js.org/d3.v5.min.js";
+      script.onload = () => this.updateAsync([], element, config, {}, {}, () => {});
+      document.head.appendChild(script);
+    }
+  },
+  updateAsync: function(data, element, config, queryResponse, details, done) {
+    if (!window.d3) {
+      console.error("D3 library not loaded");
+      return;
+    }
+
+    var svg = d3.select(element).select(".gauge");
+    var width = element.clientWidth;
+    var height = element.clientHeight;
+    var radius = Math.min(width, height) / 2;
+
+    svg.selectAll("*").remove();
+
+    var min = config.min;
+    var max = config.max;
+
+    // Pull the value from the first measure in the query results
+    var value = data[0][queryResponse.fields.measure_like[0].name].value;
+
+    // Define segments based on the user inputs
+    var segments = [
+      { color: "red", from: config.red_segment_from, to: config.red_segment_to },
+      { color: "yellow", from: config.yellow_segment_from, to: config.yellow_segment_to },
+      { color: "green", from: config.green_segment_from, to: config.green_segment_to }
+    ];
+
+    // Adjust the rotation so the gauge starts at the top and moves clockwise
+    const adjustAngle = angle => angle - Math.PI / 2;
+
+    // Determine the donut thickness based on config
+    const innerRadius = radius * (1 - config.donut_thickness);
+    const outerRadius = radius * 0.9;
+
+    // Create background arc
+    segments.forEach(segment => {
+      var arc = d3.arc()
+        .innerRadius(innerRadius)
+        .outerRadius(outerRadius)
+        .startAngle(adjustAngle((Math.PI * 2) * ((segment.from - min) / (max - min))))
+        .endAngle(adjustAngle((Math.PI * 2) * ((segment.to - min) / (max - min))));
+
+      svg.append("path")
+        .attr("d", arc)
+        .attr("fill", segment.color)
+        .attr("transform", `translate(${width / 2}, ${height / 2})`);
+
+      if (config.show_segment_values) {
+        const startAngle = adjustAngle(Math.PI * 2 * (segment.from - min) / (max - min));
+        const endAngle = adjustAngle(Math.PI * 2 * (segment.to - min) / (max - min));
+
+        const startTextX = width / 2 + (radius * 0.8) * Math.cos(startAngle);
+        const startTextY = height / 2 + (radius * 0.8) * Math.sin(startAngle);
+
+        const endTextX = width / 2 + (radius * 0.8) * Math.cos(endAngle);
+        const endTextY = height / 2 + (radius * 0.8) * Math.sin(endAngle);
+
+        svg.append("text")
+          .attr("x", startTextX)
+          .attr("y", startTextY)
+          .attr("class", "min-max-text")
+          .attr("fill", "black")
+          .text(segment.from);
+
+        svg.append("text")
+          .attr("x", endTextX)
+          .attr("y", endTextY)
+          .attr("class", "min-max-text")
+          .attr("fill", "black")
+          .text(segment.to);
+      }
+    });
+
+    // Correct the needle position calculation
+    var needleAngle = adjustAngle((value - min) / (max - min) * Math.PI * 2);
+
+    svg.append("line")
+      .attr("x1", width / 2)
+      .attr("y1", height / 2)
+      .attr("x2", width / 2 + radius * 0.9 * Math.cos(needleAngle))
+      .attr("y2", height / 2 + radius * 0.9 * Math.sin(needleAngle))
+      .attr("stroke", "black")
+      .attr("stroke-width", 2);
+
+    // Determine the position for the value text
+    let textYPosition;
+    if (config.value_position === "bottom") {
+      textYPosition = height - 20;
+    } else {
+      textYPosition = height / 2;
+    }
+
+    // Display the value in the center or bottom of the gauge
+    svg.append("text")
+      .attr("x", width / 2)
+      .attr("y", textYPosition)
+      .attr("class", "value-text")
+      .attr("fill", "black")
+      .text(value);
+
+    done();
+  }
+});
